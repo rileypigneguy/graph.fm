@@ -25,7 +25,7 @@ if user:
   response = requests.get(url,params=params)
   data = response.json()
 
-  artists_list = [{"Artist": artist["name"]} for artist in data["artists"]["artist"]]
-  st.table(artists_list)
+  artists_list = [{"Artist": artist["name"], "Playcount": int(artist["playcount"])} for artist in data["artists"]["artist"]]
+  st.dataframe(artists_list, use_container_width=True)
     
 st.write("🚧 Development is still in progress 🚧")
