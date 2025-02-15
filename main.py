@@ -25,7 +25,7 @@ if user:
   response = requests.get(url,params=params)
   data = response.json()
 
-  for artist in data["artists"]["artist"]:
-    st.write(artist["name"])
+  artists_list = [{"Artist": artist["name"]} for artist in data["artists"]["artist"]]
+  st.table(artists_list)
     
 st.write("🚧 Development is still in progress 🚧")
