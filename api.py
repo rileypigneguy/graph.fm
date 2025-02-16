@@ -3,10 +3,17 @@ import requests
 from datetime import datetime
 import os
 import math
+import streamlit as st
 
 
 api_key = os.environ["LASTFM_API_KEY"]
 dataset = None
+
+artist_corrections = {
+  "Charli XCX": "Charli xcx",
+  "Travi$ Scott": "Travis Scott",
+  "geordie greep": "Geordie Greep"
+}
 
 def get_scrobbles(user, page_num):
   method = "user.getRecentTracks"
@@ -33,6 +40,7 @@ def get_scrobbles(user, page_num):
     artist_name = track["artist"]["#text"]
     date_str = track["date"]["#text"]
     parsed_date = datetime.strptime(date_str, "%d %b %Y, %H:%M")
+    artist_name = artist_corrections.get(artist_name, artist_name)
 
     scrobbles.append({
       "track_name":track_name,
@@ -58,10 +66,12 @@ def get_user_info(user):
 def generate_dataset(user):
   global dataset
   
-  user = get_user_info(user)
-  total_scrobbles = int(user["playcount"])
+  user_info = get_user_info(user)
+  total_scrobbles = int(user_info["playcount"])
   required_pages = math.ceil(total_scrobbles / 1000)
+  #required_pages = 2
   
+  progress_bar = st.progress(0)  # Initialize progress bar
   page_num = 1
   scrobbles = []
   
@@ -70,57 +80,71 @@ def generate_dataset(user):
     if not addition:
       break
     scrobbles += addition
+    progress_bar.progress(page_num/required_pages)  # Update progress
     page_num += 1
 
   dataset = scrobbles
   return scrobbles
 
-def compare_ranks(date_1, date_2):
-  global dataset
-  artist_ranks1 = {}
-  artist_ranks2 = {}
-    
+def compare_ranks(dataset, date_1, date_2, type):
+  streams1 = {}
+  streams2 = {}
+  search_terms = {
+      "Artist": {"key": "artist_name", "artist": None},
+      "Album": {"key": "album_name", "artist": "artist_name"},
+      "Track": {"key": "track_name", "artist": "artist_name"}
+  }
+  search_term = search_terms[type]
+
   for scrobble in dataset:
-    artist = scrobble["artist_name"]
-    date = scrobble["date"]
-    if date <= date_1:
-      artist_ranks1[artist] = 1 + artist_ranks1.get(artist, 0)
-    if date <= date_2:
-      artist_ranks2[artist] = 1 + artist_ranks2.get(artist, 0)
+      name = scrobble[search_term["key"]]
+      artist = scrobble[search_term["artist"]] if search_term["artist"] else None
+      date = scrobble["date"]
 
-  # Combine artists from both rankings
-  all_artists = set(artist_ranks1.keys()).union(artist_ranks2.keys())
-
-  # Create sorted lists of artists by scrobble count for ranking
-  ranked_artists1 = sorted(artist_ranks1.items(), key=lambda x: x[1], reverse=True)
-  ranked_artists2 = sorted(artist_ranks2.items(), key=lambda x: x[1], reverse=True)
-
+      # Combine name and artist into a single key, but account for dashes in names
+      if artist:
+          item_key = f"{name}:::{artist}"
+      else:
+          item_key = name
+      if date <= date_1:
+          streams1[item_key] = 1 + streams1.get(item_key, 0)
+      if date <= date_2:
+          streams2[item_key] = 1 + streams2.get(item_key, 0)
+        
+  # Create sorted lists of items by scrobble count for ranking
+  ranked_item1 = sorted(streams1.items(), key=lambda x: x[1], reverse=True)
+  ranked_item2 = sorted(streams2.items(), key=lambda x: x[1], reverse=True)
   # Create rank dictionaries
-  rank_dict1 = {artist: idx + 1 for idx, (artist, _) in enumerate(ranked_artists1)}
-  rank_dict2 = {artist: idx + 1 for idx, (artist, _) in enumerate(ranked_artists2)}
-
+  rank_dict1 = {name: idx + 1 for idx, (name, _) in enumerate(ranked_item1)}
+  rank_dict2 = {name: idx + 1 for idx, (name, _) in enumerate(ranked_item2)}
   # Create a list of dictionaries for DataFrame
   data = []
-  for artist in all_artists:
-      scrobbles1 = artist_ranks1.get(artist, 0)
-      scrobbles2 = artist_ranks2.get(artist, 0)
-      rank1 = rank_dict1.get(artist, len(all_artists))
-      rank2 = rank_dict2.get(artist, len(all_artists))
+  for item in streams2:
+      # Split back to name and artist if applicable, using a different separator
+      if ':::' in item:
+          name, artist = item.split(':::')
+      else:
+          name, artist = item, None
+      scrobbles1 = streams1.get(item, 0)
+      scrobbles2 = streams2.get(item, 0)
+      rank1 = rank_dict1.get(item, len(streams2))
+      rank2 = rank_dict2.get(item, len(streams2))
       rank_change = rank1 - rank2
       scrobbles_change = scrobbles2 - scrobbles1
-
-      data.append({
-          "Artist": artist,
-          "Rank 1": rank1,
-          "Rank 2": rank2,
-          "Scrobbles 1": scrobbles1,
-          "Scrobbles 2": scrobbles2,
-          "Rank_Change": rank_change,
-          "Scrobbles_Change": scrobbles_change
+      info = {type: name}
+      if type != "Artist" and artist:
+          info["Artist"] = artist
+      info.update({
+          "Rank (current)": rank2,
+          "Rank (old)": rank1,
+          "Scrobbles (current)": scrobbles2,
+          "Scrobbles (old)": scrobbles1,
+          "Rank Change": rank_change,
+          "Scrobbles Change": scrobbles_change
       })
-
-  # Sort the data list by Rank1
-  data.sort(key=lambda x: x["Rank 1"])
+      data.append(info)
+  # Sort the data list by current rank
+  data.sort(key=lambda x: x["Rank (current)"])
 
   return data
 
