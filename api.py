@@ -52,14 +52,22 @@ def get_scrobbles(user, page_num):
   return scrobbles
 
 
-def get_user_info(user):
+def get_user_info(user,method=None):
   url = f"https://ws.audioscrobbler.com/2.0/?method=user.getinfo&api_key={api_key}&user={user}&format=json"
   response = requests.get(url)
   if response.status_code == 404:
     return {"error":"User not found, please try again"}
   if response.status_code == 200:
     data = response.json()
-    return data["user"]
+    if not method:
+      return data["user"]
+    if method == 'pfp':
+      try:
+        for icon in data["user"]["image"]:
+          if icon["size"] == "small":
+            return icon["#text"]
+      except Exception:
+          return None
   else:
     return {"error":"Internal Server Error, try again later"}
 

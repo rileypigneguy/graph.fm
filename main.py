@@ -59,5 +59,5 @@ st.set_page_config(
 
 menu()
 st.title("Graph.fm")
-st.write("Visualize your last.fm stats and rank changes!")
+st.write("Visualize your last.fm stats and rank changes, made with [last.fm](%s)!" % "https://www.last.fm/home")
 main()

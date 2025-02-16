@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import menu, redirect_unauthenticated
+from utils import menu, redirect_unauthenticated, footer
 from datetime import datetime
 from api import compare_ranks
 import pandas as pd
@@ -52,3 +52,4 @@ def rank_compare():
 redirect_unauthenticated()
 menu()
 rank_compare()
+footer()
