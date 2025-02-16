@@ -11,7 +11,6 @@ st.set_page_config(
 )
 
 def rank_compare():
-    st.title("📊 Rank Comparison")
     with st.form("rank_compare_form"):
         date1 = st.date_input('Enter comparison date:', format="DD/MM/YYYY")
         option = st.selectbox(
@@ -24,12 +23,12 @@ def rank_compare():
         # Only run the comparison and show results when Compare is clicked
         if st.form_submit_button('Compare!'):
             data = compare_ranks(st.session_state.scrobbles, date1, date2, option)
-            st.session_state.results = data  # Store results in session state
+            st.session_state.rank_comparison_results = data  # Store results in session state
     
     # Show the stored results if they exist
-    if st.session_state.results:
+    if st.session_state.rank_comparison_results:
         # Convert the list of dictionaries to a pandas DataFrame
-        df = pd.DataFrame(st.session_state.results)
+        df = pd.DataFrame(st.session_state.rank_comparison_results)
 
         # Style the DataFrame
         def color_rank_change(val):
@@ -48,7 +47,7 @@ def rank_compare():
         # Display the styled DataFrame
         st.dataframe(styled_df, use_container_width=True, height=800, hide_index=True)
 
-
+st.title("📊 Rank Comparison")
 redirect_unauthenticated()
 menu()
 rank_compare()

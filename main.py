@@ -16,7 +16,8 @@ def get_username():
       st.session_state.user = user
       st.session_state.username_form_submitted = True
       st.session_state.scrobbles = False
-      st.session_state.results = False
+      st.session_state.rank_comparison_results = False
+      st.session_state.artist_tags = False
       st.rerun()
 
 

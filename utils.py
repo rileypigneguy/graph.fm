@@ -3,9 +3,10 @@ from api import get_user_info
 
 
 def menu():
-  st.sidebar.page_link("main.py", label="Add User",icon=":material/home:")
+  st.sidebar.page_link("main.py", label="Input User",icon=":material/home:")
   if "scrobbles" in st.session_state and st.session_state.scrobbles:
     st.sidebar.page_link("pages/rank_compare.py", label="Rank Comparison",icon=":material/leaderboard:")
+    st.sidebar.page_link("pages/genre.py", label="Genre",icon=":material/genres:")
     user_pfp = get_user_info(st.session_state.user,"pfp")
     st.sidebar.write("---")
     if user_pfp:
