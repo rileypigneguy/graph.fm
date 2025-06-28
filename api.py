@@ -31,16 +31,20 @@ def get_release_date(mbid):
   
 
 def generate_datasets(user):
+  import time
 
   user_info = get_user_info(user)
   total_scrobbles = int(user_info["playcount"])
   required_pages = math.ceil(total_scrobbles / 1000)
   page_num = 0
-  progress_bar = st.progress(0)  # Initialize progress bar
+  progress_bar = st.progress(0)
+  progress_text = st.empty()
   
   artists = {}
   scrobbles = []
   min_date = date.max
+  failed_pages = []
+  actual_scrobbles_fetched = 0
   
   while page_num < required_pages:
     page_num += 1
@@ -51,47 +55,98 @@ def generate_datasets(user):
     }
     
     url = f"https://ws.audioscrobbler.com/2.0/?method=user.getRecentTracks&api_key={api_key}&user={user}&format=json"
-    response = requests.get(url, params=params)
     
-    if response.status_code != 200:
-      continue
-    data = response.json()
-  
-    for track in data["recenttracks"]["track"]:
-      if track.get("@attr",{}).get("nowplaying",False):
-        continue
+    # Retry logic for failed requests
+    max_retries = 3
+    retry_count = 0
+    success = False
+    
+    while retry_count < max_retries and not success:
+      try:
+        response = requests.get(url, params=params, timeout=10)
         
-      album_name = track["album"]["#text"]
-      track_name = track["name"]
-      mbid = track["mbid"]
-      artist_name = track["artist"]["#text"]
-      date_str = track["date"]["#text"]
-      parsed_date = (datetime.strptime(date_str, "%d %b %Y, %H:%M")).date()
-      artist_name = artist_corrections.get(artist_name, artist_name)
-      
-      if artist_name not in artists:
-        top_tag = get_artist_tags(artist_name)
-        artists[artist_name] = {
-          "scrobbles": 1,
-          "top_tag": top_tag
-        }
-      else:
-        artists[artist_name]["scrobbles"] += 1
+        if response.status_code == 200:
+          data = response.json()
+          
+          # Check if we have valid track data
+          if "recenttracks" in data and "track" in data["recenttracks"]:
+            tracks = data["recenttracks"]["track"]
+            page_scrobbles = 0
+            
+            for track in tracks:
+              if track.get("@attr",{}).get("nowplaying",False):
+                continue
+                
+              album_name = track["album"]["#text"]
+              track_name = track["name"]
+              mbid = track["mbid"]
+              artist_name = track["artist"]["#text"]
+              date_str = track["date"]["#text"]
+              parsed_date = (datetime.strptime(date_str, "%d %b %Y, %H:%M")).date()
+              artist_name = artist_corrections.get(artist_name, artist_name)
+              
+              if artist_name not in artists:
+                top_tag = get_artist_tags(artist_name)
+                artists[artist_name] = {
+                  "scrobbles": 1,
+                  "top_tag": top_tag
+                }
+              else:
+                artists[artist_name]["scrobbles"] += 1
 
-      if parsed_date < min_date:
-        min_date = parsed_date
-
-      #release_date = get_release_date(mbid)
-      
-      scrobbles.append({
-        "track_name":track_name,
-        "artist_name":artist_name,
-        "album_name":album_name,
-        "date":parsed_date,
-        "genre": artists[artist_name]["top_tag"]
-      })
+              if parsed_date < min_date:
+                min_date = parsed_date
+              
+              scrobbles.append({
+                "track_name":track_name,
+                "artist_name":artist_name,
+                "album_name":album_name,
+                "date":parsed_date,
+                "genre": artists[artist_name]["top_tag"]
+              })
+              page_scrobbles += 1
+            
+            actual_scrobbles_fetched += page_scrobbles
+            success = True
+            progress_text.text(f"Fetched {actual_scrobbles_fetched}/{total_scrobbles} scrobbles (Page {page_num}/{required_pages})")
+            
+          else:
+            st.warning(f"No track data in response for page {page_num}")
+            break
+            
+        elif response.status_code == 429:  # Rate limited
+          wait_time = 2 ** retry_count  # Exponential backoff
+          st.warning(f"Rate limited. Waiting {wait_time} seconds before retrying page {page_num}...")
+          time.sleep(wait_time)
+          retry_count += 1
+          
+        else:
+          st.warning(f"HTTP {response.status_code} error on page {page_num}. Retrying...")
+          retry_count += 1
+          time.sleep(1)
+          
+      except requests.exceptions.RequestException as e:
+        st.warning(f"Request failed for page {page_num}: {str(e)}. Retrying...")
+        retry_count += 1
+        time.sleep(1)
     
+    if not success:
+      failed_pages.append(page_num)
+      st.error(f"Failed to fetch page {page_num} after {max_retries} attempts")
+    
+    # Small delay to be respectful to the API
+    time.sleep(0.1)
     progress_bar.progress(page_num/required_pages)
+
+  # Report on data completeness
+  completion_rate = (actual_scrobbles_fetched / total_scrobbles) * 100
+  progress_text.text(f"Completed: {actual_scrobbles_fetched}/{total_scrobbles} scrobbles ({completion_rate:.1f}%)")
+  
+  if failed_pages:
+    st.warning(f"Failed to fetch {len(failed_pages)} pages: {failed_pages}. Data may be incomplete.")
+  
+  if completion_rate < 95:
+    st.warning(f"Only {completion_rate:.1f}% of scrobbles were fetched. Consider re-running the data fetch.")
 
   st.session_state.min_date = min_date
   st.session_state.scrobbles = scrobbles
@@ -672,27 +727,44 @@ genre_picker = {
 disqualifying_genres = ["seen live"]
 
 def get_artist_tags(artist_name):
+  import time
   
   if genre_picker.get(artist_name):
     return genre_picker[artist_name]
+    
   # URL-encode the artist name
   encoded_artist = urllib.parse.quote_plus(artist_name)
   url = f"https://ws.audioscrobbler.com/2.0/?method=artist.getTopTags&artist={encoded_artist}&api_key={api_key}&format=json"
 
-  response = requests.get(url)
-  data = response.json()
-
-  if response.status_code != 200 or "toptags" not in data:
-    st.write("rate limited", data.get("error"))
-    return "NA"
-  else:
-    for tag_info in data["toptags"]["tag"]:
-      tag_name = tag_info["name"]
-      if tag_name in disqualifying_genres:
-        continue
+  max_retries = 2
+  retry_count = 0
+  
+  while retry_count < max_retries:
+    try:
+      response = requests.get(url, timeout=5)
+      
+      if response.status_code == 200:
+        data = response.json()
+        if "toptags" in data and "tag" in data["toptags"]:
+          for tag_info in data["toptags"]["tag"]:
+            tag_name = tag_info["name"]
+            if tag_name in disqualifying_genres:
+              continue
+            tag_name = translater.get(tag_name, tag_name.capitalize())
+            return tag_name
+        return "NA"
         
-      tag_name = translater.get(tag_name,tag_name.capitalize())
-      return tag_name
+      elif response.status_code == 429:  # Rate limited
+        time.sleep(0.5)
+        retry_count += 1
+      else:
+        return "NA"
+        
+    except requests.exceptions.RequestException:
+      retry_count += 1
+      time.sleep(0.2)
+  
+  return "NA"
 
 def genre_dict(start_date, end_date):
   scrobbles = st.session_state.scrobbles
