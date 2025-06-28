@@ -1,6 +1,6 @@
 import streamlit as st
 from utils import menu, redirect_unauthenticated, footer
-from datetime import datetime
+import datetime
 from api import compare_ranks
 import pandas as pd
 
@@ -11,19 +11,32 @@ st.set_page_config(
 )
 
 def rank_compare():
-    with st.form("rank_compare_form"):
-        date1 = st.date_input('Enter comparison date:', format="DD/MM/YYYY")
-        option = st.selectbox(
-            'Select type:',
-            ['Artist', 'Album', 'Track']
+
+    if not st.session_state.rank_comparison_results:
+        st.session_state.rank_comparison_results = compare_ranks(
+            st.session_state.scrobbles, 
+            datetime.date.today() - datetime.timedelta(days=365), 
+            datetime.date.today(), 
+            'Artist'
         )
         
-        date2 = datetime.today().date()
+    with st.form("rank_compare_form"):
+        date1 = st.date_input(
+            'Enter comparison date:', 
+            value = datetime.date.today() - datetime.timedelta(days=365),
+            format="DD/MM/YYYY"
+        )
+        
+        option = st.selectbox(
+            'Select type:',
+            ['Artist', 'Album', 'Track', 'Genre']
+        )
+        
+        date2 = datetime.date.today()
     
         # Only run the comparison and show results when Compare is clicked
         if st.form_submit_button('Compare!'):
-            data = compare_ranks(st.session_state.scrobbles, date1, date2, option)
-            st.session_state.rank_comparison_results = data  # Store results in session state
+            st.session_state.rank_comparison_results = compare_ranks(st.session_state.scrobbles, date1, date2, option)
     
     # Show the stored results if they exist
     if st.session_state.rank_comparison_results:

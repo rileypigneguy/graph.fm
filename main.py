@@ -1,5 +1,5 @@
 import streamlit as st
-from api import get_user_info, generate_dataset
+from api import get_user_info, generate_datasets
 from utils import menu
 
 # Initialize session state for user
@@ -17,7 +17,14 @@ def get_username():
       st.session_state.username_form_submitted = True
       st.session_state.scrobbles = False
       st.session_state.rank_comparison_results = False
-      st.session_state.artist_tags = False
+      st.session_state.artists_genre = False
+      st.session_state.genre_tread1 = False
+      st.session_state.genre_tread2 = False
+      st.session_state.genre_tread3 = False
+      st.session_state.genre_tread4 = False
+      st.session_state.listening_stats_chart = False
+      st.session_state.rank_limit = False
+      st.session_state.cumulative_listening_chart = False
       st.rerun()
 
 
@@ -31,20 +38,16 @@ def main():
       (st.session_state.username_form_submitted)):
     
       user_info = get_user_info(user)
+      #st.write(user_info)
   
       if user_info.get("error"):
         st.write(user_info["error"])
         st.session_state.user = None
-        st.rerun()
       else:
         st.write(f"Fetching data for {user}...")
-        scrobbles = generate_dataset(user)
-        if not scrobbles:
-          st.write("Error fetching data, please try again later")
-        else:
-          st.session_state.scrobbles = scrobbles
-          st.session_state.username_form_submitted = False
-          st.rerun()
+        generate_datasets(user)
+        st.session_state.username_form_submitted = False
+        st.rerun()
     else:
       st.write(f"Data fetched for {user} start analyzing by choosing a page in the sidebar...")
 
