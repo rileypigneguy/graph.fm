@@ -20,15 +20,15 @@ def menu():
     st.sidebar.page_link("pages/first_achievers.py",
                          label="First Achievers Stats",
                          icon=":material/emoji_events:")
-    st.sidebar.page_link("pages/music_discovery.py",
-                         label="Music Discovery",
-                         icon=":material/headphones:")
-    st.sidebar.page_link("pages/similar_artists_network.py",
-                       label="Artist Network",
-                       icon=":material/share:")
-    st.sidebar.page_link("pages/listening_calendar.py",
-                       label="Listening Calendar",
-                       icon=":material/calendar_month:")
+    #st.sidebar.page_link("pages/music_discovery.py",
+                         #label="Music Discovery",
+                         #icon=":material/headphones:")
+    #st.sidebar.page_link("pages/similar_artists_network.py",
+                       #label="Artist Network",
+                       #icon=":material/share:")
+    #st.sidebar.page_link("pages/listening_calendar.py",
+                       #label="Listening Calendar",
+                       #icon=":material/calendar_month:")
 
     user_pfp = get_user_info(st.session_state.user, "pfp")
     st.sidebar.write("---")

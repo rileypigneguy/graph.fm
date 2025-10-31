@@ -75,13 +75,17 @@ def generate_graphs(smoothing, top_x):
   df["period"] = df["date"].dt.to_period(mapping[smoothing]).apply(lambda r: r.start_time)
   genre_counts_cumulative = df.groupby(["period", "genre"]).size().unstack(fill_value=0)
   genre_cumulative = genre_counts_cumulative.cumsum()
-  top_genres = genre_cumulative.sum().nlargest(top_x).index
+
+  # Get top X genres based on FINAL cumulative totals (last row)
+  final_totals = genre_cumulative.iloc[-1] if len(genre_cumulative) > 0 else genre_cumulative.sum()
+  top_genres = final_totals.nlargest(top_x).index.tolist()
 
   # Generate first graph (cumulative counts)
-  other_genres = genre_cumulative.drop(columns=top_genres).sum(axis=1)
+  other_genres = genre_cumulative.drop(columns=top_genres, errors='ignore').sum(axis=1)
   genre_data1 = genre_cumulative[top_genres].copy()
   genre_data1["Other"] = other_genres
-  columns_order = ["period"] + (["Other"] + top_genres.tolist())[::-1]
+  # Order: period, then top genres in reverse, then Other on top
+  columns_order = ["period"] + top_genres[::-1] + ["Other"]
   genre_data1 = genre_data1.reset_index()[columns_order]
   fig1 = px.area(
       genre_data1,
@@ -95,7 +99,7 @@ def generate_graphs(smoothing, top_x):
   # Generate second graph (cumulative percentages)
   genre_percentage = genre_cumulative.div(genre_cumulative.sum(axis=1), axis=0) * 100
   genre_data2 = genre_percentage[top_genres].copy()
-  genre_data2["Other"] = genre_percentage.drop(columns=top_genres).sum(axis=1)
+  genre_data2["Other"] = genre_percentage.drop(columns=top_genres, errors='ignore').sum(axis=1)
   genre_data2 = genre_data2.reset_index()[columns_order]
   fig2 = px.area(
       genre_data2,
@@ -119,24 +123,39 @@ def generate_graphs(smoothing, top_x):
       'Q': 90,     # ~1 quarter
       'Y': 365     # ~1 year
   }
-  window_size = window_sizes[mapping[smoothing][0]]
+  window_size = window_sizes[mapping[smoothing]]
 
   # Generate third graph (rolling window counts)
   all_rolling_counts = genre_counts_daily.rolling(window=f"{window_size}D", min_periods=1).sum()
   available_top_genres = [c for c in top_genres if c in all_rolling_counts.columns]
   rolling_top_counts = all_rolling_counts[available_top_genres].copy()
-  rolling_other_counts = all_rolling_counts.drop(columns=available_top_genres).sum(axis=1)
+  rolling_other_counts = all_rolling_counts.drop(columns=available_top_genres, errors='ignore').sum(axis=1)
   rolling_top_counts["Other"] = rolling_other_counts
   rolling_counts_data = rolling_top_counts.reset_index()
-  rolling_cols = ["day"] + (["Other"] + available_top_genres)[::-1]
-  rolling_counts_data = rolling_counts_data[[c for c in rolling_cols if c in rolling_counts_data.columns]]
+  rolling_cols = ["day"] + available_top_genres[::-1] + ["Other"]
+  rolling_counts_data = rolling_counts_data[rolling_cols]
 
-  period_label = {'D': 'day', 'W': 'week', 'M': 'month', 'Q': 'quarter', 'Y': 'year'}[mapping[smoothing][0]]
+  # Fixed period label logic
+  period_labels = {
+      'D': 'Day',
+      'W': 'Week',
+      'M': 'Month',
+      'Q': 'Quarter',
+      'Y': 'Year'
+  }
+  period_label = period_labels[mapping[smoothing]]
+
+  # Proper pluralization
+  if window_size == 1:
+      window_text = f"1 {period_label}"
+  else:
+      window_text = f"{window_size} {period_label}s"
+
   fig3 = px.area(
       rolling_counts_data,
       x="day",
       y=rolling_counts_data.columns[1:],
-      title=f"Rolling Music Genre Listens Over Period Length {window_size} {period_label}s",
+      title=f"Rolling Music Genre Listens Over {window_text}",
       labels={"value": "Listens", "day": "Date"},
   )
   fig3.update_layout(legend=dict(traceorder='reversed'))
@@ -144,16 +163,16 @@ def generate_graphs(smoothing, top_x):
   # Generate fourth graph (rolling window percentages)
   rolling_percentages = all_rolling_counts.div(all_rolling_counts.sum(axis=1), axis=0) * 100
   rolling_top_pct = rolling_percentages[available_top_genres].copy()
-  rolling_other_pct = rolling_percentages.drop(columns=available_top_genres).sum(axis=1)
+  rolling_other_pct = rolling_percentages.drop(columns=available_top_genres, errors='ignore').sum(axis=1)
   rolling_top_pct["Other"] = rolling_other_pct
   rolling_pct_data = rolling_top_pct.reset_index()
-  rolling_pct_data = rolling_pct_data[[c for c in rolling_cols if c in rolling_pct_data.columns]]
+  rolling_pct_data = rolling_pct_data[rolling_cols]
 
   fig4 = px.area(
       rolling_pct_data,
       x="day",
       y=rolling_pct_data.columns[1:],
-      title=f"Rolling Music Genre Distribution Over Period Length {window_size} {period_label}s",
+      title=f"Rolling Music Genre Distribution Over {window_text}",
       labels={"value": "Percentage (%)", "day": "Date"},
   )
   fig4.update_layout(legend=dict(traceorder='reversed'))
