@@ -5,6 +5,8 @@ from datetime import datetime, date
 import os
 import math
 import streamlit as st
+from collections import defaultdict
+
 
 api_key = os.environ["LASTFM_API_KEY"]
 
@@ -661,3 +663,57 @@ def genre_dict(start_date, end_date):
 
   st.session_state.artists_genre = ranked_artists
   return ranked_artists
+
+
+def get_uniqued_data(scrobbles, option, top_x, end_date):
+  """
+  Analyzes the top X songs/albums and returns unique artists with their counts.
+
+  Returns a list of dictionaries with:
+  - Artist: artist name
+  - Top Song/Album: name of their highest ranked song/album
+  - Rank: rank of that song/album in the top X
+  - Scrobbles: number of scrobbles for that song/album
+  - Count: number of songs/albums that artist has in the top X
+  """
+
+  # Determine which field to group by based on option
+  if option == 'Songs':
+      item_field = 'track_name'
+  else:  # Albums
+      item_field = 'album_name'
+
+  # Get top X items with their scrobble counts (filtered by date)
+  item_counts = defaultdict(int)
+  for scrobble in scrobbles:
+      # Filter by date
+      if scrobble.get('date') and scrobble['date'] <= end_date:
+          artist = scrobble.get('artist_name')
+          item = scrobble.get(item_field)
+          if artist and item:  # Make sure both exist
+              key = (artist, item)
+              item_counts[key] += 1
+
+  # Sort by scrobbles descending and take top X
+  top_items = sorted(item_counts.items(), key=lambda x: x[1], reverse=True)[:top_x]
+
+  # Group by artist and track their top item
+  artist_data = {}
+  for rank, ((artist, item_name), scrobbles_count) in enumerate(top_items, 1):
+      if artist not in artist_data:
+          # First occurrence of this artist = their top ranked item
+          artist_data[artist] = {
+              'Artist': artist,
+              f'Top {option[:-1]}': item_name,  # Remove 's' from 'Songs' or 'Albums'
+              'Rank': rank,
+              'Scrobbles': scrobbles_count,
+              'Count': 1
+          }
+      else:
+          # Artist already exists, increment their count
+          artist_data[artist]['Count'] += 1
+
+  # Convert to list and sort by rank
+  results = sorted(artist_data.values(), key=lambda x: x['Rank'])
+
+  return results
