@@ -29,7 +29,7 @@ def menu():
             with col1:
                 st.image(user_pfp, width=40)
             with col2:
-                st.markdown(f"<div style='padding-top: 5px;'>**{username}**</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding-top: 5px;'><b>{username}</b></div>",unsafe_allow_html=True)
         else:
             st.sidebar.write(username)
 
